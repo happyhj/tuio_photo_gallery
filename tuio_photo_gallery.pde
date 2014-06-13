@@ -55,7 +55,7 @@ public void draw() {
   background(100);
   // call multi-touch values and update
   //updateImageData();
-  drawAlbumCovers();
+  drawAlbums();
   //drawAlbumContents();
   updateGestureLog();
   TuioCursor tapCursor = getTap();
@@ -102,7 +102,7 @@ public TuioCursor getTap() { // 1: tap(0->1->0)
     int numberOfCursor = gestureLog.get(sizeOfGestureLog-2).size();
     Vector<TuioCursor> beforeLastCursors = gestureLog.get(sizeOfGestureLog-2);
     Vector<TuioCursor> lastCursors = gestureLog.get(sizeOfGestureLog-1);
-    println(numberOfCursor);
+    //println(numberOfCursor);
     for(int i=0;i<numberOfCursor;i++){
       TuioCursor cursor = beforeLastCursors.get(i);
       if ((sizeOfGestureLog > 100)&&(isCursorExist(cursor.getCursorID(), lastCursors) == false)) {
@@ -262,20 +262,88 @@ public JSONObject getGestureTargetPhoto(TuioCursor cursor) {
   return null;  
 }
 
+// -1: not album cover, else positive: album index 
+public int isCover(JSONObject targetPhoto) {
+  JSONObject cover = new JSONObject();
+  for(int i = 0;i<data.size();i++){
+    JSONObject album = data.getJSONObject(i);
+    cover = album.getJSONObject("cover");   
+    if( cover.getString("path") == targetPhoto.getString("path")){
+      return i; 
+    }
+  }
+  return -1;
+}
+//---------------------------------------------
+public void toggleAlbum(int albumIdx){
+  // toggle isExpanded
+  JSONObject album = data.getJSONObject(albumIdx);
+  JSONObject cover = album.getJSONObject("cover");
+  JSONArray photos = album.getJSONArray("photos");
+  int numberOfPhoto = photos.size();
+  
+  boolean isExpanded = album.getBoolean("isExpanded");
+  if(isExpanded == true) {
+    album.setBoolean("isExpanded", false);
+  } else {
+    album.setBoolean("isExpanded", true);
+  }
+  isExpanded = album.getBoolean("isExpanded");
+  
+  if(isExpanded == true) {
+    // if isExpanded is true, set values of photo object base on cover image.
+    pushMatrix();
+    // Positioning Image
+    translate(cover.getFloat("centerX"), cover.getFloat("centerY"));
+    // Rotate Image
+    //rotate( radians(cover.getFloat("rotate")) );
+    // align center
+    //translate(- cover.getFloat("width") / 2, - cover.getFloat("height") / 2);
+    translate(0, -50);
+  
+    for(int i=0;i<numberOfPhoto;i++){
+      JSONObject photo = photos.getJSONObject(i);
+      pushMatrix();    
+      //println((i*1.0/numberOfPhoto)*360);
+      rotate( radians((i*1.0/numberOfPhoto)*360) + 1 );      
+      translate(0, 300);
+      photo.setFloat("width", 200);   
+      photo.setFloat("height", 100);
+      photo.setFloat("rotate", 3.0);  
+
+      // align center
+      //translate(- photo.getFloat("width") / 2, - photo.getFloat("height") / 2);
+
+      
+      photo.setFloat("centerX", modelX(0,0,0));
+      photo.setFloat("centerY",  modelY(0,0,0));  
+
+    
+      //album.setJSONObject("cover", cover);
+      //data.setJSONObject(i, album);
+    
+      //image(coverImage, 0, 0, cover.getFloat("width"), cover.getFloat("height"));
+      popMatrix();    
+    }
+    popMatrix();    
+  } else {
+    // if isExpanded is false, set values of photo object to 0
+    
+  }  
+  //println(data);
+}
+
 public void tapHandler(TuioCursor tapCursor) {
   // get Target Photo JSON Object 
   JSONObject target = getGestureTargetPhoto(tapCursor);
   if (target != null) {  
     println("tap handler"); 
-    moveAlbumFront(target);
-  }
-  noStroke();
-  if (target != null) {  
-    fill(255, 0, 0);
-    target.setFloat("width", target.getFloat("width") * 1.1);
-    target.setFloat("height", target.getFloat("height") * 1.1);
+    int albumIndex = isCover(target);
+    if(albumIndex != -1){
+      toggleAlbum(albumIndex);
+      moveAlbumFront(target);      
+    }
   } 
-  ellipse(tapCursor.getX()*SCREEN_SIZE_X, tapCursor.getY()*SCREEN_SIZE_Y, 30, 30);
 }  
 
 public void dragstartHandler(TuioCursor dragstartCursor) {
@@ -330,8 +398,9 @@ public ArrayList<File> getImageFileList(File albumFolder) {
 
   // to find out what a valid image file suffic might be
   for (File file : albumFiles) {
-    if ((!file.isDirectory())&&isImage(file))
+    if ((!file.isDirectory())&&isImage(file)){
       imageFiles.add(file);
+    }
   }
   return imageFiles;
 }
@@ -353,36 +422,32 @@ public void initData() {
   ArrayList<File> albumFiles;
   int photoId = 0;
 
-//  for (File albumFolder : albumFolders) {
   for(int j=0; j < albumFolders.size();j++){
     File albumFolder = albumFolders.get(j);
     albumFiles = getImageFileList(albumFolder);
     JSONObject albumData = new JSONObject();
     albumData.setBoolean("isExpanded", false);
-    
-    for(File albumFile : albumFiles) {
+
+    JSONArray contentPhotos = new JSONArray();
+    for(File albumFile : albumFiles) {      
       if(albumFile.getPath().indexOf("cover") > -1) {  
         JSONObject photObj = createPhotoObject(albumFile.getPath(), photoId);
         Images.add(loadImage(photObj.getString("path")));
-        photoId++;    
-        albumData.setJSONObject("cover", photObj);  
-      } else {
-        JSONArray contentPhotos = new JSONArray();
-        for(int i=0; i < albumFiles.size()-1;i++){
+        albumData.setJSONObject("cover", photObj); 
+        photoId++;     
+      } else {      
           JSONObject photObj = createPhotoObject(albumFile.getPath(), photoId);
           Images.add(loadImage(photObj.getString("path")));
+          contentPhotos.append(photObj);
           photoId++; 
-          contentPhotos.setJSONObject(i, photObj);
-        }
-        albumData.setJSONArray("photos", contentPhotos);
       }
     }
+    albumData.setJSONArray("photos", contentPhotos);
+
     if(albumFiles.size()>0){
       data.append(albumData);
     }
   }
-  
-  println(data);
 }
 
 public void initCoverPosition() {
@@ -393,20 +458,23 @@ public void initCoverPosition() {
     
     cover.setFloat("centerX", 150 + (290 * i));
     cover.setFloat("centerY", 150);    
-    cover.setFloat("width", 250);   
-    cover.setFloat("height", 250);
-    cover.setFloat("rotate", 10.0);
+    cover.setFloat("width", 200);   
+    cover.setFloat("height", 200);
+    cover.setFloat("rotate", 0.0);
   
     album.setJSONObject("cover", cover);
     data.setJSONObject(i, album);
   }
 }
 
-public void drawAlbumCovers() {
+public void drawAlbums() {
   // drawing
   for(int i=0; i<data.size();i++) {
     JSONObject album = data.getJSONObject(i);
+    Boolean isExpanded = album.getBoolean("isExpanded");
     JSONObject cover = album.getJSONObject("cover");
+    JSONArray photos = album.getJSONArray("photos");
+
     int imgId = cover.getInt("id");
     
     PImage coverImage = Images.get(imgId);
@@ -420,7 +488,26 @@ public void drawAlbumCovers() {
     // draw Image
     image(coverImage, 0, 0, cover.getFloat("width"), cover.getFloat("height"));
     popMatrix();
+    
+    if(isExpanded == true){
+      for(int j=0;j<photos.size();j++){
+        JSONObject photo = photos.getJSONObject(j);
+        int photoId = photo.getInt("id");
+        PImage photoImage = Images.get(photoId);
+        pushMatrix();
+        // Positioning Image
+        translate(photo.getFloat("centerX"), photo.getFloat("centerY"));
+        // Rotate Image
+        rotate( radians(photo.getFloat("rotate")) );
+        // align center
+        translate(- photo.getFloat("width") / 2, - photo.getFloat("height") / 2);
+        // draw Image
+        image(photoImage, 0, 0, photo.getFloat("width"), cover.getFloat("height"));
+        popMatrix();
+      }
+    }
   }
+  
 }
 
 public JSONObject createPhotoObject(String pathStr, int photoId) {
